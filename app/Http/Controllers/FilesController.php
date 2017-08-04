@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use App\File;
+use Auth;
 
 class FilesController extends Controller
 {
@@ -38,18 +39,50 @@ class FilesController extends Controller
 
     }
 
+
+    /**
+     * Upload a file and save information into the database about it
+     *
+     * @param Request $request
+     * @return File/json with errors
+     */
     public function store(Request $request)
     {
-        $file = new File;
-        $file->name = '';
-        $file->disk_location = '';
-        $file->application_inside_name = '';
+        $this->validate($request, [
+            'file' => 'bail|required'
+        ]);
 
-        if ($file->save()) {
-            return $file;
+        $currentUserId = Auth::user()->id;
+
+        $file = new File();
+        $file->user_id = $currentUserId;
+
+        if($request->hasFile('file')) { //check if file parameter exists
+            $uploadedFile = $request->file('file');
+            $applicationInsideName = md5($file->name. time()).'.'.$uploadedFile->getClientOriginalExtension();
+
+            $file->name = $uploadedFile->getClientOriginalName();
+            $file->application_inside_name = $applicationInsideName;
+            $file->disk_location = 'uploads/'.$currentUserId;
+        } else {
+            return response()->json([
+                'message' => 'Invalid data, file parameter not found!',
+            ], 400);
         }
 
-        throw new HttpException(400, "Invalid data");
+        if (isset($uploadedFile) && $uploadedFile->move($file->disk_location, $applicationInsideName)) {
+            if ($file->save()) {
+                return $file;
+            }
+        } else {
+            return response()->json([
+                'message' => 'Invalid data, file could not be uploaded!',
+            ], 400);
+        }
+
+        return response()->json([
+            'message' => 'Invalid data!',
+        ], 400);
     }
 
     public function update(Request $request, $id)
