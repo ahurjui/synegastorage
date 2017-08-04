@@ -8,6 +8,7 @@ use Illuminate\Http\Response;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use App\File;
 use Auth;
+use Illuminate\Support\Facades\File as FileSystem;
 
 class FilesController extends Controller
 {
@@ -85,22 +86,66 @@ class FilesController extends Controller
         ], 400);
     }
 
+    /**
+     * Update a record in database with the new file information
+     *
+     * @param Request $request
+     * @param $id
+     * @return mixed|static
+     */
     public function update(Request $request, $id)
     {
-        if (!$id) {
-            throw new HttpException(400, "Invalid id");
+        $this->validate($request, [
+            'file' => 'bail|required'
+        ]);
+
+        $currentUserId = Auth::user()->id;
+
+        $file = File::find(1);;
+
+        if (!$file) {
+            return response()->json([
+                'message' => 'Invalid id, file record not found!',
+            ], 400);
         }
 
-        $file = File::find($id);
-        $file->name = '';
-        $file->disk_location = '';
-        $file->application_inside_name = '';
+        $file->user_id = $currentUserId;
 
-        if ($file->save()) {
-            return $file;
+        if($request->hasFile('file')) { //check if file parameter exists
+            $uploadedFile = $request->file('file');
+            $applicationInsideName = md5($file->name. time()).'.'.$uploadedFile->getClientOriginalExtension();
+            $oldFilePath = public_path().'/'.$file->disk_location.'/'.$applicationInsideName;
+            $oldOriginalFileName = $file->name;
+
+            $file->name = $uploadedFile->getClientOriginalName();
+            $file->application_inside_name = $applicationInsideName;
+            $file->disk_location = 'uploads/'.$currentUserId;
+        } else {
+            return response()->json([
+                'message' => 'Invalid data, file parameter not found!',
+            ], 400);
         }
 
-        throw new HttpException(400, "Invalid data");
+        if (isset($uploadedFile) && $uploadedFile->move($file->disk_location, $applicationInsideName)) {
+            if ($file->save()) {
+                $path = public_path().'/recycle/'.$currentUserId.'/';
+
+                if (!FileSystem::isDirectory($path)) {
+                    FileSystem::makeDirectory($path, 0777, true, true);
+                }
+
+                FileSystem::move($oldFilePath, $path.$oldOriginalFileName);
+                return $file;
+            }
+        } else {
+            return response()->json([
+                'message' => 'Invalid data, file could not be uploaded!',
+            ], 400);
+        }
+
+        return response()->json([
+            'message' => 'Invalid data!',
+        ], 400);
     }
 
     public function destroy($id)
