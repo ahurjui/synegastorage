@@ -23,4 +23,5 @@ Route::group(['middleware' => 'auth.basic'], function () {
     Route::post('/files', 'FilesController@store');
     Route::put('/files/{id}', 'FilesController@update');
     Route::delete('/files/{id}', 'FilesController@destroy');
+    Route::delete('/files', 'FilesController@recycle');
 });
