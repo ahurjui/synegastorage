@@ -15,11 +15,14 @@ class CreateFilesTable extends Migration
     {
         Schema::create('files', function (Blueprint $table) {
             $table->increments('id');
+            $table->integer('user_id', false, true);
             $table->string('name', 255);
             $table->string('application_inside_name', 255);
             $table->string('disk_location', 255);
             $table->tinyInteger('status')->default(1);
             $table->timestamps();
+
+            $table->foreign('user_id')->references('id')->on('users');
         });
     }
 
