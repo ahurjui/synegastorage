@@ -191,4 +191,23 @@ class FilesController extends Controller
             ], 400);
         }
     }
+
+    /**
+     * Empty recycle directory
+     */
+    public function recycle()
+    {
+        $directory = public_path().'/recycle/';
+        $success = FileSystem::cleanDirectory($directory);
+
+        if ($success) {
+            return response()->json([
+                'message' => 'The recycle bin was deleted!',
+            ], 200);
+        } else {
+            return response()->json([
+                'message' => 'Something went wrong!',
+            ], 400);
+        }
+    }
 }
