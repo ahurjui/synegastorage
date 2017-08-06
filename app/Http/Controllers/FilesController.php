@@ -13,12 +13,18 @@ use Illuminate\Support\Facades\File as FileSystem;
 
 class FilesController extends Controller
 {
+    /**
+     * Get a list of all files
+     * @return mixed
+     */
     public function index()
     {
-        $files = File::paginate(10);
+        $files = File::all();
 
         if (!$files) {
-            throw new HttpException(400, "Invalid data");
+            return response()->json([
+                'message' => 'Invalid data!',
+            ], 400);
         }
 
         return response()->json(
@@ -27,17 +33,25 @@ class FilesController extends Controller
         );
     }
 
+    /**
+     * Show details about one file
+     *
+     * @param $id
+     * @return mixed
+     */
     public function show($id)
     {
         if (!$id) {
-            throw new HttpException(400, "Invalid id");
+            return response()->json([
+                'message' => 'Invalid id!',
+            ], 400);
         }
 
         $file = File::find($id);
 
-        return response()->json([
-            $file,
-        ], 200);
+        return response()->json(
+            $file
+        , 200);
 
     }
 
@@ -63,7 +77,7 @@ class FilesController extends Controller
             $uploadedFile = $request->file('file');
             $applicationInsideName = md5($file->name. time()).'.'.$uploadedFile->getClientOriginalExtension();
 
-            $file->name = $uploadedFile->getClientOriginalName();
+            $file->name = str_replace('/','',$uploadedFile->getClientOriginalName());
             $file->application_inside_name = $applicationInsideName;
             $file->disk_location = 'uploads/'.$currentUserId;
         } else {
@@ -118,7 +132,7 @@ class FilesController extends Controller
             $oldFilePath = public_path().'/'.$file->disk_location.'/'.$file->application_inside_name;
             $oldOriginalFileName = $file->name;
 
-            $file->name = $uploadedFile->getClientOriginalName();
+            $file->name = str_replace('/', '', $uploadedFile->getClientOriginalName());
             $file->application_inside_name = $applicationInsideName;
             $file->disk_location = 'uploads/'.$currentUserId;
         } else {
@@ -209,5 +223,36 @@ class FilesController extends Controller
                 'message' => 'Something went wrong!',
             ], 400);
         }
+    }
+
+    /**
+     * Download file
+     *
+     * @param int $id - id of the file to be downloaded
+     * @param string $name - the name of the file
+     */
+    public function download($id, $name)
+    {
+        if (!$id) {
+            return response()->json([
+                'message' => 'Invalid data, record not found!',
+            ], 400);
+        }
+
+        $file = File::where('id', $id)->where('status', File::STATUS_ACTIVE)->limit(1)->get();
+        if (!$file->all()) {
+            return response()->json([
+                'message' => 'Invalid id, file record not found!',
+            ], 400);
+        }
+
+        $file = $file[0];
+        if (!$name) {
+            $name = $file->name;
+        }
+
+        $path = public_path().'/'.$file->disk_location.'/'.$file->application_inside_name;
+
+        return response()->download($path, $name);
     }
 }

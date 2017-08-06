@@ -20,6 +20,7 @@ Route::middleware('auth:api')->get('/user', function (Request $request) {
 Route::group(['middleware' => 'auth.basic'], function () {
     Route::get('/files', 'FilesController@index');
     Route::get('/files/{id}', 'FilesController@show');
+    Route::get('/files/download/{id}/{name}', 'FilesController@download');
     Route::post('/files', 'FilesController@store');
     Route::put('/files/{id}', 'FilesController@update');
     Route::delete('/files/{id}', 'FilesController@destroy');
