@@ -19,7 +19,7 @@ class FilesController extends Controller
      */
     public function index()
     {
-        $files = File::all();
+        $files = File::where([['status', '=', File::STATUS_ACTIVE]])->get();
 
         if (!$files) {
             return response()->json([
