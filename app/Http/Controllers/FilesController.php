@@ -39,7 +39,7 @@ class FilesController extends Controller
      * @param $id
      * @return mixed
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
         if (!$id) {
             return response()->json([
@@ -47,10 +47,15 @@ class FilesController extends Controller
             ], 400);
         }
 
-        $file = File::find($id);
+        $file = File::where('id', $id)->where('status', File::STATUS_ACTIVE)->limit(1)->get();
+        if (!$file->all()) {
+            return response()->json([
+                'message' => 'Invalid id, file record not found!',
+            ], 400);
+        }
 
         return response()->json(
-            $file
+            $file[0]
         , 200);
 
     }
@@ -65,28 +70,28 @@ class FilesController extends Controller
     public function store(Request $request)
     {
         $this->validate($request, [
-            'file' => 'bail|required'
+            'file' => 'required',
+            'file_path' => 'required',
+            'client_id' => 'required'
         ]);
 
         $currentUserId = Auth::user()->id;
 
         $file = new File();
         $file->user_id = $currentUserId;
+        $file->client_id = $request->get('client_id');
+        $file->file_path = $request->get('file_path');
 
         if($request->hasFile('file')) { //check if file parameter exists
             $uploadedFile = $request->file('file');
-            $applicationInsideName = md5($file->name. time()).'.'.$uploadedFile->getClientOriginalExtension();
-
-            $file->name = str_replace('/','',$uploadedFile->getClientOriginalName());
-            $file->application_inside_name = $applicationInsideName;
-            $file->disk_location = 'uploads/'.$currentUserId;
+            $file->name = $uploadedFile->getClientOriginalName();
         } else {
             return response()->json([
                 'message' => 'Invalid data, file parameter not found!',
             ], 400);
         }
 
-        if (isset($uploadedFile) && $uploadedFile->move($file->disk_location, $applicationInsideName)) {
+        if (isset($uploadedFile) && $uploadedFile->move('uploads/'.$file->client_id.'/'.$file->file_path, $uploadedFile->getClientOriginalName())) {
             if ($file->save()) {
                 return $file;
             }
@@ -111,7 +116,9 @@ class FilesController extends Controller
     public function update(Request $request, $id)
     {
         $this->validate($request, [
-            'file' => 'bail|required'
+            'file' => 'required',
+            'file_path' => 'required',
+            'client_id' => 'required'
         ]);
 
         $currentUserId = Auth::user()->id;
@@ -128,29 +135,27 @@ class FilesController extends Controller
 
         if($request->hasFile('file')) { //check if file parameter exists
             $uploadedFile = $request->file('file');
-            $applicationInsideName = md5($file->name. time()).'.'.$uploadedFile->getClientOriginalExtension();
-            $oldFilePath = public_path().'/'.$file->disk_location.'/'.$file->application_inside_name;
-            $oldOriginalFileName = $file->name;
+            $oldFile = 'uploads/'.$file->client_id.'/'.$file->file_path.'/'.$file->name;
 
-            $file->name = str_replace('/', '', $uploadedFile->getClientOriginalName());
-            $file->application_inside_name = $applicationInsideName;
-            $file->disk_location = 'uploads/'.$currentUserId;
+            //move the previous file to the recycle directory
+            $recyclePath = public_path().'/recycle/'.$file->file_path.'/';
+            if (!FileSystem::isDirectory($recyclePath)) {
+                FileSystem::makeDirectory($recyclePath, 0777, true, true);
+            }
+            FileSystem::move($oldFile, $recyclePath.$file->name);
+
+            $file->client_id = $request->get('client_id');
+            $file->file_path = $request->get('file_path');
+            $file->name = $uploadedFile->getClientOriginalName();
         } else {
             return response()->json([
                 'message' => 'Invalid data, file parameter not found!',
             ], 400);
         }
 
-        $upload = $uploadedFile->move($file->disk_location, $applicationInsideName);
+        $upload = $uploadedFile->move('uploads/'.$file->client_id.'/'.$file->file_path, $file->name);
         if (isset($uploadedFile) && $upload) {
             if ($file->save()) {
-                $path = public_path().'/recycle/'.$currentUserId.'/';
-
-                if (!FileSystem::isDirectory($path)) {
-                    FileSystem::makeDirectory($path, 0777, true, true);
-                }
-
-                FileSystem::move($oldFilePath, $path.$oldOriginalFileName);
                 return $file;
             }
         } else {
@@ -182,16 +187,15 @@ class FilesController extends Controller
             ], 400);
         }
 
-        $oldFilePath = public_path().'/'.$file[0]->disk_location.'/'.$file[0]->application_inside_name;
-        $oldOriginalFileName = $file[0]->name;
-        $path = public_path().'/recycle/'.Auth::user()->id.'/';
+        $oldFilePath = public_path().'/uploads/'.$file[0]->client_id.'/'.$file[0]->file_path.'/'.$file[0]->name;
+        $recyclePath = public_path().'/recycle/'.$file[0]->client_id.'/'.$file[0]->file_path.'/';
 
 
-        if (!FileSystem::isDirectory($path)) {
-            FileSystem::makeDirectory($path, 0777, true, true);
+        if (!FileSystem::isDirectory($recyclePath)) {
+            FileSystem::makeDirectory($recyclePath, 0777, true, true);
         }
 
-        FileSystem::move($oldFilePath, $path.$oldOriginalFileName);
+        FileSystem::move($oldFilePath, $recyclePath.$file[0]->name);
 
         $file[0]->status = File::STATUS_ARCHIVED;
 
@@ -251,7 +255,7 @@ class FilesController extends Controller
             $name = $file->name;
         }
 
-        $path = public_path().'/'.$file->disk_location.'/'.$file->application_inside_name;
+        $path = public_path().'/uploads/'.$file->client_id.'/'.$file->file_path.'/'.$file->name;
 
         return response()->download($path, $name);
     }
